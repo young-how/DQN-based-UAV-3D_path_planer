@@ -16,6 +16,7 @@ DQN.py:(main函数 入口1)设置模型训练参数与城市环境参数，对DQ
 
 watch_uav.py：(main函数 入口2)对训练好的决策模型进行测试，载入Qlocal.pth与Qtarget.pth文件，对无人机航迹规划过程进行可视化
 ![avatar](path1.gif) ![avatar](path2.gif)
+
 env.py：设置env类，对城市环境进行描述，实现该环境中的所有UAV与传感器运行的仿真模拟
 
 model.py：神经网络模型的定义
