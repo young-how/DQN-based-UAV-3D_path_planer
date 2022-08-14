@@ -1,5 +1,5 @@
 🌍
-*∙ [简体中文](README-zh.md)∙ [English](README-el.md)
+*∙ [简体中文](README.md)∙ [English](README-el.md)
 
 # DQN-based-UAV-3D_path_planer
 Realization of UAV's Track Planning in 3D Urban Environment Based on Reinforcement Learning Algorithm(DQN)
