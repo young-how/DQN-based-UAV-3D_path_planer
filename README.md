@@ -13,13 +13,11 @@ pytorch(cuda)
 经过13万周期、19小时的迭代训练，最终无人机智能体能够在难度10的环境中以较高的任务完成率安全到达目标点。
 
 ![avatar](航迹图.jpg)
-## 项目说明 Introduction
+## 项目说明 
 DQN.py:(main函数 入口1)设置模型训练参数与城市环境参数，对DQN模型进行训练，输出Qlocal.pth与Qtarget.pth文件
 
 
 watch_uav.py：(main函数 入口2)对训练好的决策模型进行测试，载入Qlocal.pth与Qtarget.pth文件，对无人机航迹规划过程进行可视化
-
-watch_uav.py: (main function entry 2) Test the trained decision-making model, load the Qlocal.pth and Qtarget.pth files, and visualize the UAV trajectory planning process
 
 ![avatar](path1.gif) ![avatar](path2.gif)
 
