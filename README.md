@@ -1,23 +1,21 @@
-# DQN-based-UAV-3D_path_planer
-Realization of UAV's Track Planning in 3D Urban Environment Based on Reinforcement Learning Algorithm(DQN)
+🌍
+*∙ [简体中文](README.md)∙ [English](README-el.md)
 
+# 基于DQN算法的无人机三维城市空间航线规划
 本文基于强化学习算法DQN实现离散3维城市空间环境下的智能航线规划，能根据无人机感知进行避障，并根据风速情况选择能耗较低的路线。
 
 ## 环境需求
 python 3.7
 
 pytorch(cuda)
-## 模型简介 performance
+## 模型简介
 在x100 y100 z22的三维空间中，采用课程学习方式对无人机智能体进行训练，利用设置好的不同难度的课程对智能体进行梯度训练，能让智能体更快地获取决策经验。由于训练初期缺乏决策经验，需要随机选择行为对环境进行试探，本文设置随机试探周期为1000，周期内采用ε-贪心策略选择智能体行为，周期内贪心概率从1逐渐递减到0.01。1000周期后贪心概率保持在0.01。在一个周期的训练场景中随机生成15个无人机对象，当所有无人机进入终止状态（电量耗尽、坠毁、到达目标点、超过最大步长）后进入下一个周期的训练，当80%以上的无人机能够到达目标点时进入下一难度等级的训练。
 经过13万周期、19小时的迭代训练，最终无人机智能体能够在难度10的环境中以较高的任务完成率安全到达目标点。
 
-In the three-dimensional space of x100 y100 z22, the UAV agent is trained by the curriculum learning method, and the gradient training of the agent is carried out using the set courses of different difficulty, so that the agent can acquire decision-making experience faster. Due to the lack of decision-making experience in the early stage of training, it is necessary to randomly select behaviors to test the environment. In this paper, the random testing period is set to 1000, and the ε-greedy strategy is used to select agent behaviors during the period. The greedy probability in the period gradually decreases from 1 to 0.01. After 1000 cycles The greedy probability remains at 0.01. Randomly generate 15 drone objects in one cycle of training scenarios. When all drones enter the termination state (power exhaustion, crash, reach the target point, exceed the maximum step size), enter the next cycle of training, when 80 When more than % of the drones can reach the target point, they will enter the training of the next difficulty level.
-After 130,000 cycles and 19 hours of iterative training, the final UAV agent can safely reach the target point with a high task completion rate in an environment of difficulty 10.
 ![avatar](航迹图.jpg)
 ## 项目说明 Introduction
 DQN.py:(main函数 入口1)设置模型训练参数与城市环境参数，对DQN模型进行训练，输出Qlocal.pth与Qtarget.pth文件
 
-DQN.py: (main function entry 1) Set the model training parameters and urban environment parameters, train the DQN model, and output the Qlocal.pth and Qtarget.pth files
 
 watch_uav.py：(main函数 入口2)对训练好的决策模型进行测试，载入Qlocal.pth与Qtarget.pth文件，对无人机航迹规划过程进行可视化
 
@@ -27,26 +25,17 @@ watch_uav.py: (main function entry 2) Test the trained decision-making model, lo
 
 env.py：设置env类，对城市环境进行描述，实现该环境中的所有UAV与传感器运行的仿真模拟
 
-env.py: Set the env class, describe the city environment, and realize the simulation of all UAVs and sensors in the environment.
-
 model.py：神经网络模型的定义
-
-model.py: Definition of neural network model
 
 replay_buffer.py：经验池的定义
 
-replay_buffer.py: Definition of the experience pool
-
 UAV.py：定义UAV类，对无人机的自身参数与行为进行描述
 
-UAV.py: Define the UAV class to describe the UAV's own parameters and behavior
-
-## 系统框架 Structure
+## 系统框架
 ![avatar](DQN无人机航迹规划系统框架图.jpg)
-## 训练参数设置 Parameter option
+## 训练参数设置 
 env.py:
 ~~~ 
-  #Randomly generate the house building set, UAV set, and sensor set in the simulation environment, and initialize the training environment
   env.reset()  #对仿真环境中的房屋建筑集合、无人机集合、传感器集合进行随机生成，对训练环境进行初始化 
   
   #Set the simulation environment parameters
@@ -54,23 +43,23 @@ env.py:
 ~~~
 DQN.py
 ~~~ 
-  BATCH_SIZE = 128    #批量大小 batch_size
+  BATCH_SIZE = 128    #批量大小
   TAU = 0.005 
-  gamma = 0.99   #折扣率  Discount Rate
+  gamma = 0.99   #折扣率
   LEARNING_RATE = 0.0004   #学习率
-  TARGET_UPDATE = 10   #Q网络更新周期 QNetwork update cycle
-  num_episodes = 40000  #训练周期长度 training period length
+  TARGET_UPDATE = 10   #Q网络更新周期 
+  num_episodes = 40000  #训练周期长度 
   print_every = 1  
-  hidden_dim = 16 ## 64 ## 16 #隐藏层维数 Hidden layer dimension
-  min_eps = 0.01    #贪心概率 Greedy Probability
-  max_eps_episode = 10   #最大贪心次数 Maximum greedy times
-  space_dim = 42 # n_spaces   状态空间维度  State space dimension
-  action_dim = 27 # n_actions   动作空间维度  Action space dimension
+  hidden_dim = 16 ## 64 ## 16 #隐藏层维数 
+  min_eps = 0.01    #贪心概率
+  max_eps_episode = 10   #最大贪心次数
+  space_dim = 42 # n_spaces   状态空间维度
+  action_dim = 27 # n_actions   动作空间维度
   threshold = 200    
 ~~~
 UAV.py:
 ~~~ 
-  UAV. __init__()  #对UAV的参数进行设置 Set the parameters of the UAV
+  UAV. __init__()  #对UAV的参数进行设置
 ~~~
 ## 无人机状态空间
 UAV.py:
@@ -96,32 +85,28 @@ def state(self):
         return state_grid  #无人机状态向量
 ~~~
 
-## 奖励函数设置 reward function
+## 奖励函数设置
 UAV.py:
 
 无人机未到达终止状态（未到达终点、未坠毁、为超最大步长）
-
-The UAV has not reached the terminal state
 ~~~
-        #计算总奖励 Total reward
+        #计算总奖励 
         r=r_climb+r_target+r_e-crash*self.p_crash   
 ~~~
 无人机到达终止状态
-
-The UAV has reached the terminal state
 ~~~
         #终止状态判断
         if self.x<=0 or self.x>=self.ev.len-1 or self.y<=0 or self.y>=self.ev.width-1 or self.z<=0 or self.z>=self.ev.h-1 or self.ev.map[self.x,self.y,self.z]==1 or random.random()<self.p_crash:
-            #发生碰撞，产生巨大惩罚 Collision, huge penalty
+            #发生碰撞，产生巨大惩罚
             return r-200,True,2
         if self.distance<=5:
-            #到达目标点，给予大量奖励  Reach the target point and give a lot of rewards
+            #到达目标点，给予大量奖励
             #self.ev.map[self.x,self.y,self.z]=0
             return r+200,True,1 
         if self.step>=self.d_origin+2*self.ev.h:
-            #步数超过最差步长，给予惩罚  If the number of steps exceeds the worst step size, a penalty will be given
+            #步数超过最差步长，给予惩罚
             return r-20,True,5
         if self.cost>self.bt:
-            #电量耗尽，给予大量惩罚  Run out of battery, give a lot of penalties
+            #电量耗尽，给予大量惩罚
             return r-20,True,3
 ~~~
