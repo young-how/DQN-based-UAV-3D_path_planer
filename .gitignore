@@ -7,3 +7,5 @@
 *.cpython-39
 
 *.html
+
+config/DB.xml
