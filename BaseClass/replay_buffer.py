@@ -33,7 +33,7 @@ class ReplayMemory(object):
         self.memory = []
         self.position = 0
        
-    def push(self, batch):
+    def push(self, batch,error):
         self.memory.append(batch)
         if len(self.memory) > self.capacity:
             del self.memory[0]    
@@ -48,11 +48,11 @@ class ReplayMemory(object):
     def sample2(self, batch_size):
         transitions = random.sample(self.buffer, batch_size)
         state, action, reward, next_state, done = zip(*transitions)
-        return np.array(state), action, reward, np.array(next_state), done 
+        return np.array(state), action, reward, np.array(next_state), done ,None,None
     
     def __len__(self):
         return len(self.memory)
-
+    
 #基于优先级的经验回放所需要的数据结构
 class SumTree:
     def __init__(self, capacity: int):
@@ -134,6 +134,17 @@ class ReplayTree:#ReplayTree for the per(Prioritized Experience Replay) DQN.
 
     def __len__(self):# 返回存储的样本数量
         return self.tree.total()
+    # 经验回放模板
+    # def push(self, batch):
+    #     self.memory.append(batch)
+    #     if len(self.memory) > self.capacity:
+    #         del self.memory[0]    
+       
+    # def add(self, state, action, reward, next_state, done): 
+    #     self.buffer.append((state, action, reward, next_state, done)) 
+
+    # def sample(self, batch_size):
+    #     return random.sample(self.memory, batch_size)
     
     def push(self, sample, error):#Push the sample into the replay according to the importance sampling weight
         p = (np.abs(error.detach().numpy()) +self.epsilon) ** self.alpha
@@ -167,7 +178,40 @@ class ReplayTree:#ReplayTree for the per(Prioritized Experience Replay) DQN.
         is_weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
         is_weights /= is_weights.max()
 
-        return zip(*batch), idxs, is_weights
+        return  batch, idxs, is_weights   #zip(*batch), idxs, is_weights
+
+    def sample2(self, batch_size):
+        pri_segment = self.tree.total() / batch_size
+
+        priorities = []
+        batch = []
+        idxs = []
+
+        is_weights = []
+
+        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
+        min_prob = np.min(self.tree.tree[-self.tree.capacity:]) / self.tree.total() 
+
+        for i in range(batch_size):
+            a = pri_segment * i
+            b = pri_segment * (i+1)
+
+            s = random.uniform(a, b)
+            idx, p, data = self.tree.get_leaf(s)
+
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+            prob = p / self.tree.total()
+
+        sampling_probabilities = np.array(priorities) / self.tree.total()
+        is_weights = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
+        is_weights /= is_weights.max()
+        state, action, reward, next_state, done = zip(*batch)
+        # idxs_re = zip(*idxs)
+        # weights = zip(*is_weights)
+        return np.array(state), action, reward, np.array(next_state), done,idxs,is_weights
+    
     
     def batch_update(self, tree_idx, abs_errors):#Update the importance sampling weight
         abs_errors += self.epsilon

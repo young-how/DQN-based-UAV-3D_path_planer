@@ -1,0 +1,78 @@
+CREATE TABLE Train_info (
+    uuid VARCHAR(36) PRIMARY KEY,
+    date DATE,
+    html_dir VARCHAR(100) NOT NULL,
+    train_score FLOAT,
+    epoch INT,
+   Is_Scored TINYINT(0),
+  train_time FLOAT,
+ path_len FLOAT,
+score_quality INT CHECK (score_quality BETWEEN 1 AND 5),
+score_len INT CHECK (score_len BETWEEN 1 AND 5),
+score_threaten INT CHECK (score_threaten BETWEEN 1 AND 5)
+);
+
+ALTER TABLE Train_info MODIFY COLUMN html_dir MEDIUMTEXT NOT NULL;
+ALTER TABLE Train_info MODIFY COLUMN html_dir BLOB NOT NULL;
+
+添加以下列：（1）start2goal，记录目标与终点的直线长度（2）len_Astar,Astar算法得到的航线长度。
+（3） ReachGoal,记录是否到达目标点
+ALTER TABLE Train_info ADD COLUMN start2goal FlOAT;
+ALTER TABLE Train_info ADD COLUMN len_Astar FlOAT;
+ALTER TABLE Train_info ADD COLUMN ReachGoal TINYINT(0);
+
+
+/*
+下面是关于模型加载的数据库
+ Navicat Premium Data Transfer
+
+ Source Server         : local
+ Source Server Type    : MySQL
+ Source Server Version : 80036 (8.0.36)
+ Source Host           : localhost:3306
+ Source Schema         : project2
+
+ Target Server Type    : MySQL
+ Target Server Version : 80036 (8.0.36)
+ File Encoding         : 65001
+
+ Date: 05/04/2024 19:31:33
+*/
+
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ----------------------------
+-- Table structure for load_model_time
+-- ----------------------------
+DROP TABLE IF EXISTS `load_model_time`;
+CREATE TABLE `load_model_time` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `create_time` date DEFAULT NULL COMMENT '创建时间',
+  `model_size` float DEFAULT NULL COMMENT '模型大小',
+  `load_time` float DEFAULT NULL COMMENT '加载时间',
+  `host_des` varchar(255) DEFAULT NULL COMMENT '区分主机',
+  `error_des` varchar(255) DEFAULT NULL,
+  `ip_config` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb3;
+
+-- ----------------------------
+-- Records of load_model_time
+-- ----------------------------
+BEGIN;
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (1, '2024-04-05', 0, 0.0000183582, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (2, '2024-04-05', 0, 0.0000247955, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (3, '2024-04-05', 138.15, 1.12552, 'ZongzhengdeMacBook-Pro.local', NULL, '172.20.10.2');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (4, '2024-04-05', 58.1384, 0.480305, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (5, '2024-04-05', 138.21, 3.12409, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (6, '2024-04-05', 58.2011, 0.435543, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (7, '2024-04-05', 58.2011, 0.439291, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (8, '2024-04-05', 10.202, 0.0849378, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (9, '2024-04-05', 138.21, 3.1243, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (10, '2024-04-05', 100.87, 0.790734, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (11, '2024-04-05', 47.537, 0.358564, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+INSERT INTO `load_model_time` (`id`, `create_time`, `model_size`, `load_time`, `host_des`, `error_des`, `ip_config`) VALUES (12, '2024-04-05', 20.8689, 0.152391, 'ZongzhengdeMacBook-Pro.local', NULL, '127.0.0.1');
+COMMIT;
+
+SET FOREIGN_KEY_CHECKS = 1;

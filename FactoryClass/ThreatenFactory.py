@@ -4,7 +4,7 @@ import sys
 # sys.path.append("E:\younghow\RLGF\Threatens")
 # sys.path.append("E:\younghow\RLGF\BaseClass")
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../Threatens')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../Obstacles')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../BaseClass')
 import importlib
 class ThreatenFactory():

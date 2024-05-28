@@ -3,7 +3,7 @@ from CalMod import *
 class BaseThreaten():
     def __init__(self,param:dict) -> None:
         #初始化基本位置信息与类型信息
-        self.position=Loc(int(param.get("position").get('x')),int(param.get("position").get('y')),int(param.get("position").get('z')))  #初始化坐标位置
+        self.position=Loc(float(param.get("position").get('x')),float(param.get("position").get('y')),float(param.get("position").get('z')))  #初始化坐标位置
         self.type=param.get("type")         #威胁类型
 
     def check_threaten(self,p:Loc):

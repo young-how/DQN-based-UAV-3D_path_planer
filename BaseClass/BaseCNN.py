@@ -488,13 +488,13 @@ class QValueNetContinuous_SAC(torch.nn.Module):
         super(QValueNetContinuous_SAC, self).__init__()
         state_dim=int(param.get('w'))
         hidden_dim=int(param.get('hiden_dim'))
-        action_dim=int(param.get('output'))
+        action_dim=int(param.get('action_dim'))
         self.fc1 = torch.nn.Linear(state_dim + action_dim, hidden_dim)
         self.fc2 = torch.nn.Linear(hidden_dim, hidden_dim)
-        self.fc_out = torch.nn.Linear(hidden_dim, 1)
+        self.fc_out = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x, a):
-        cat = torch.cat([x, a], dim=1)
+        cat = torch.cat([x, a], dim=-1)
         x = F.relu(self.fc1(cat))
         x = F.relu(self.fc2(x))
         return self.fc_out(x)

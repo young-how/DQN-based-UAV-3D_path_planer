@@ -2,6 +2,7 @@
 from typing import Union
 import sys
 #sys.path.append("E:\younghow\RLGF")
+import numpy as np
 import torch
 import xmltodict
 import math
@@ -37,6 +38,14 @@ class Loc():
         new_y = self.y + other.y
         new_z = self.z + other.z
         return Loc(new_x, new_y, new_z)
+    def distance(self, other):
+        return math.sqrt((self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2)
+    def addX(self,addx:int):
+        self.x+=addx
+    def addY(self,addy:int):
+        self.y+=addy
+    def addZ(self,addz:int):
+        self.z+=addz
 
     def __hash__(self):
         return hash((self.x, self.y, self.z))
@@ -154,11 +163,36 @@ def surface3d_data(th):
             if (t0-th.position.x)**2+(t1-th.position.y)**2>th._R**2:
                 z=0
             else:
-                z=math.sqrt(th._R**2 - ((t0-th.position.x)**2+(t1-th.position.y)**2)) if ((t0-th.position.x)**2+(t1-th.position.y)**2) <= th._R**2 else 0
+                z=th._H
             y = t1
             #z = th._R**2-((t0-th.position.x)**2+(t1-th.position.y)**2)
             yield [x, y, z]
+#计算两个概率分布之间的KL散度
+def kl_divergence(p, q):
+    epsilon = 1e-10  # 微小的常数
+    p_smooth = p + epsilon
+    p_smooth=np.array(p_smooth.tolist()[0])
+    q_smooth = q + epsilon
+    q_smooth=np.array(q_smooth.tolist()[0])
+    # 计算 KL 散度
+    kl_divergence = np.sum(p_smooth * np.log(p_smooth / q_smooth))
+    #KL截断
+    if kl_divergence>1000:
+        kl_divergence=1000
+    return kl_divergence
 
+def kl_divergence_FDRL(p, q):
+    epsilon = 1e-10  # 微小的常数
+    p_smooth = p + epsilon
+    p_smooth=np.array(p_smooth.tolist())
+    q_smooth = q + epsilon
+    q_smooth=np.array(q_smooth.tolist())
+    # 计算 KL 散度
+    kl_divergence = np.sum(p_smooth * np.log(p_smooth / q_smooth))
+    #KL截断
+    if kl_divergence>1000:
+        kl_divergence=1000
+    return kl_divergence
 if __name__=="__main__":
     p1=Loc(1,0,0)
     p2=Loc(1,1,0)

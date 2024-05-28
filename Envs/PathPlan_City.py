@@ -1,4 +1,7 @@
+import datetime
+import json
 import time
+from tkinter import Grid
 from BaseClass.BaseEnv import *
 from BaseClass.CalMod import *
 import torch
@@ -9,11 +12,21 @@ import csv
 import threading
 import copy
 import heapq
+from pyecharts.charts import Surface3D
 # use_cuda = torch.cuda.is_available()
 # FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor  
 # device = torch.device("cuda" if use_cuda else "cpu")    #使用GPU进行训练
 from  torch.autograd import Variable
-#多无人机飞行边缘计算环境
+import pyecharts.options as opts #pip install pyecharts
+from pyecharts.charts import Line3D,Scatter3D,Grid
+import csv
+import uuid
+# use_cuda = torch.cuda.is_available()
+# FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor  
+# device = torch.device("cuda" if use_cuda else "cpu")    #使用GPU进行训练
+from  torch.autograd import Variable
+
+from DataBase.Connector import MySQLConnector
 class PathPlan_City(BaseEnv):
     def __init__(self,param:dict) -> None:
         #初始化
@@ -22,24 +35,38 @@ class PathPlan_City(BaseEnv):
         super().__init__(param)   #初始化基类
         self.eps=float(None2Value(param.get('eps'),0.1))      #贪心概率
         self.Is_On_Policy=int(param.get('Is_On_Policy'))      #样本采样方式1：在线策略 2：离线策略
-
+        self.param=param
         #威胁描述图层
         self.map=np.zeros((self.len,self.width))   #道路图层
+        #房屋建筑
+        self.buildings=[]
+        threaten_params=param.get('Obstacles')
+        if threaten_params != None:        
+            buildings_param=os.path.normpath(threaten_params.get('buildings'))
+            threaten_config_dict=XML2Dict(buildings_param)    
+        self.buildings_param=threaten_config_dict.get('buildings')   
+        if self.buildings_param!=None:
+            for param_threaten in self.buildings_param["Threaten"] :
+                obj_threaten=self.ThreatenFactory.Create_Threaten(param_threaten)
+                self.buildings.append(obj_threaten)
 
         #根据参数初始化Agent
         self.num_UAV=int(param.get('num_UAV'))  #UAV数目
         agents_params=param.get('Agent')
+        agents_xml_path=os.path.normpath(agents_params['xml_path_agent'])     
+        config_dict=XML2Dict(agents_xml_path)
+        uav_params=config_dict.get('Agent')
         for i in range(self.num_UAV):
-            agents_params['name']='UAV_'+str(i)
-            agents_params['j']=i
-            #agents_params['j']=0
-            obj_agent=self.AgentFactory.Create_Agent(agents_params,self)
-            agent_trainer=agents_params.get('Trainer')
-            agent_trainer['name']=obj_agent.name   #同一名称
+            uav_params['name']='UAV_'+str(i)
+            uav_params['j']=i
+            obj_agent=self.AgentFactory.Create_Agent(uav_params,self)
+            trainer_xml_path=agents_params['Trainer']
+            trainer_xml_path=os.path.normpath(trainer_xml_path.get('Trainer_path'))
+            trainer_config_dict=XML2Dict(trainer_xml_path)
+            agent_trainer=trainer_config_dict.get('Trainer')
+            agent_trainer['name']=obj_agent.name  
             obj_agent.Trainer=self.TrainerFactory.Create_Trainer(agent_trainer)   #创建智能体专属的训练器
             self.Agents.append(obj_agent)
-
-        
         #仿真推演结果读入与录入
         self.result={'success':0,'failed:':0,'meet_threaten':0,'normal':0,'loss':None,'sum_epoch':0,'eps':0.1} 
 
@@ -55,10 +82,152 @@ class PathPlan_City(BaseEnv):
         self.threads=[]
         #执行时间统计
         self.executed_time=0
+        #数据库连接类
+        DB_path=param.get('DB').get("DB_path")  
+        DB_xml_path=os.path.normpath(DB_path)
+        DB_config_dict=XML2Dict(DB_xml_path)
+        SQL_param=DB_config_dict.get('DB')
+        self.SQL_connector=MySQLConnector(SQL_param)
+        self.Train_info_line= {
+            'uuid': '12345',
+            'date': '2024-04-02',
+            'html_dir': '<html lang="en"></html>',
+            'train_score': 0.75,
+            'epoch': 10,
+            'Is_Scored': 1,
+            'train_time': 123.45,
+            'path_len': 50.0,
+            'score_quality': 3,
+            'score_len': 4,
+            'score_threaten': 2
+        }
+    def getEnvJson(self):
+        #生成环境的json字符串
+        environment=copy.copy(self.buildings_param)
+        environment['path']=[]
+        environment['epoch']=self.epoch
+        for indx,p in enumerate(self.Agents[0].path):
+            environment['path'].append(p)
+        json_str = json.dumps(environment)  #将房屋参数进行序列化
+        return json_str
 
-        
+    def render(self,data=None):
+        init_opts,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3d_opts=self.set_grid() #地图参数配置
+        for indx,uav in enumerate(self.Agents):
+            path_data=uav.path
+        path=self.draw_path(path_data,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3d_opts,init_opts) 
+        threaten_3D=self.draw_threaten_3D(None,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3d_opts,init_opts) 
+        grid = Grid() #创建空图
+        grid.add(path, grid_opts=opts.GridOpts())  
+        grid.add(threaten_3D, grid_opts=opts.GridOpts()) 
+        html=grid.render_embed()  
+        path_json=self.getEnvJson() 
+        data2={
+            'uuid':data['uuid'],
+            'json':path_json  
+        }
+        save_path='DataBase/experience/'+data['uuid']+'.html'  
+        data['html_dir']=save_path   
+        grid.render(save_path)
+        if self.SQL_connector.connection!=None:
+            #连接存在，将训练情况写入DB中
+            self.SQL_connector.insert_data('Train_info',data)  
+            self.SQL_connector.insert_data('TrainInfo_Json',data2)  
+    def draw_threaten_3D(self,marked_points,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3d_opts,init_opts):
+        #创建3D威胁图
+        re=Surface3D()
+        for th in self.buildings:
+             (
+            re
+            .add(
+                series_name="",
+                shading="color",
+                data=list(surface3d_data(th)),
+                xaxis3d_opts=x_axis3d_opts,
+                yaxis3d_opts=y_axis3d_opts,
+                zaxis3d_opts=z_axis3d_opts,
+                grid3d_opts=grid3d_opts,
+                itemstyle_opts=opts.ItemStyleOpts(
+                    color='red',  # 设置点的颜色为红色
+                    opacity=0.7,  # 可以设置透明度
+                ),
+            )
+        )
+        return re
+    def set_grid(self):
+        #提取ui的xml配置
+        ui_param=self.param.get('UI')
+        ui_param_path=os.path.normpath(ui_param.get('UI_path'))
+        ui_all_dict=XML2Dict(ui_param_path)
+        self.ui_dict=ui_all_dict.get('UI')
 
+        #定义显示大小
+        InitOpts_dict=self.ui_dict.get('InitOpt')
+        init_opts=opts.InitOpts(width=InitOpts_dict.get('width'), height=InitOpts_dict.get('height'))
+
+        self.x_axis3d_opts_dict=self.ui_dict.get('x_axis3d_opts')
+        x_axis3d_opts = opts.Axis3DOpts(
+            type_="value",
+            max_=self.x_axis3d_opts_dict.get('MAX'),  # X轴最大值
+            min_=self.x_axis3d_opts_dict.get('MIN'),  # X轴最小值
+            split_number=self.x_axis3d_opts_dict.get('split_number')
+        )
+
+        self.y_axis3d_opts_dict=self.ui_dict.get('y_axis3d_opts')
+        y_axis3d_opts = opts.Axis3DOpts(
+            type_="value",
+            max_=self.y_axis3d_opts_dict.get('MAX'),  
+            min_=self.y_axis3d_opts_dict.get('MIN'),  
+            split_number=self.y_axis3d_opts_dict.get('split_number')
+        )
+
+        self.z_axis3d_opts_dict=self.ui_dict.get('z_axis3d_opts')
+        z_axis3d_opts=opts.Axis3DOpts(
+            type_="value",
+            max_= self.z_axis3d_opts_dict.get('MAX'), 
+            min_= self.z_axis3d_opts_dict.get('MIN'), 
+            split_number=self.z_axis3d_opts_dict.get('split_number')
+        )
+
+        # 定义网格配置
+        self.grid3dopts_dict=self.ui_dict.get('Grid3DOpt')
+        grid3dopts=opts.Grid3DOpts(
+            width=self.grid3dopts_dict.get('width'), 
+            height=self.grid3dopts_dict.get('height'), 
+            depth=self.grid3dopts_dict.get('depth')
+        )
         
+        return init_opts,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3dopts
+    def draw_path(self,path_data,x_axis3d_opts,y_axis3d_opts,z_axis3d_opts,grid3d_opts,init_opts):
+        path=( 
+            Line3D(init_opts=init_opts)
+                .add(
+                series_name="",
+                shading="color",
+                data=path_data,
+                xaxis3d_opts=x_axis3d_opts,
+                yaxis3d_opts=y_axis3d_opts,
+                zaxis3d_opts=z_axis3d_opts,
+                grid3d_opts=grid3d_opts,
+                )
+            )
+        return path
+    def Threaten_rate(self,p:Loc):
+        #根据所给的坐标点返回威胁概率值，需要不同环境模型自定义
+        #特殊情况：地图边界
+        if p.x<0 or p.x>self.width or p.y <0 or p.y>self.width or p.z <0 or p.z>self.h:
+            return 1
+        for th in self.buildings:
+            if th.check_threaten(p)>0:
+                return 1
+        return 0
+    def Draw_threaten_map(self,h=0):
+        #创建完整威胁地图(二维)
+        map=np.zeros((self.width,self.len,1))
+        for i in range(self.width):
+            for j in range(self.len):
+                map[i,j,0]=self.Threaten_rate(Loc(i,j,h))
+        return map
     def Reset_Thread_UAV(self,uav):
         uav.reset()   #随机重置状态
 
@@ -174,7 +343,7 @@ class PathPlan_City(BaseEnv):
         #输出参数
         #       action  ：  动作值
         state = self.Agents[index].state()  #获取状态
-        return self.Agents[index].get_action(state,eps) #返回动作值
+        return self.Agents[index].Trainer.get_action(state,eps) #返回动作值
         
 
     def Evaluation_Action(self,index:int):
@@ -212,9 +381,8 @@ class PathPlan_City(BaseEnv):
         #将普通格式的数据存放到回放池中
         uav.Trainer.replay_memory.add(state_test, action, reward, next_state, done)
         if  len(uav.Trainer.replay_memory.buffer)>uav.Trainer.Batch_Size:
-            b_s, b_a, b_r, b_ns, b_d = uav.Trainer.replay_memory.sample2(uav.Trainer.Batch_Size)
-            uav.transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d}
-
+            b_s, b_a, b_r, b_ns, b_d,idx,weights = uav.Trainer.replay_memory.sample2(uav.Trainer.Batch_Size)
+            uav.transition_dict = {'states': b_s, 'actions': b_a, 'next_states': b_ns, 'rewards': b_r, 'dones': b_d,'idx':idx,'weights':weights}
     
     #线程启用函数(在线策略)
     def run_thread_OnPolicy(self,uav,ind,eps_rate):
@@ -289,34 +457,8 @@ class PathPlan_City(BaseEnv):
                 #如果所有智能体完成任务，推出当前推演
                 if self.Check_uav_Done():
                     break
-        
-        #train_info=self.train_off_policy_FL()   #执行完一个任务训练一次,并附带联邦学习
         self.Train_statistics(train_info)  #统计训练结果，进行格式化保存
         self.epoch+=1   #运行了一个周期
-
-        #记录每个轮次UAV的结算结果（old，使用过于麻烦，已弃用）
-        # for uav in self.Agents:
-        #     item={}
-        #     item['sum_epoch']=self.epoch
-        #     item['score']=uav.score
-        #     item['average_score']=uav.score
-        #     item['step']=uav.Step
-
-        #     item['energy_cost']=uav.energy_cost_total
-        #     item['task_collect']=uav.task_collect
-        #     item['Energy_Efficent']=uav.task_executed/(uav.energy_cost_total+0.001)
-        #     item['UE_waiting_time']=0
-        #     item['Covered_rate']=len([UE for UE in uav.UEs  if UE.Is_covered==1])/len(uav.UEs)
-        #     item['task_executed']=uav.task_executed
-        #     item['ALL_UEs_D']=0
-        #     item['ALL_UEs_F']=0
-        #     for ue in uav.UEs:
-        #         item['ALL_UEs_D']+=ue.D_t 
-        #         item['ALL_UEs_F']+=ue.F_t 
-        #         item['UE_waiting_time']+=ue.Caculate_wait_time  #统计每一个ue的等待时间
-        #     item['UE_waiting_time']=item['UE_waiting_time']/len(uav.UEs)   #平均等待时间
-        #     item['KL']=[x /uav.Max_Step for x in uav.sum_KL]    #计算平均KL散度
-        #     uav.infos.append(item) 
             
         #记录这段训练数据
         if self.epoch%self.print_loop==0:
@@ -331,9 +473,37 @@ class PathPlan_City(BaseEnv):
             else:
                 #self.Federated_Learning_choice() #选择性聚合
                 self.Federated_Learning()   #进行联邦聚合
-        
+        data_result=self.generate_train_result()  #将这一轮的训练结果进行统计
+        self.render(data_result)  #进行可视化操作，并将之存放入数据库中
         return self.result
-    
+    def generate_train_result(self):
+        #生成训练的统计结果
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        train_score=self.Agents[0].total_score  #总分
+        epoch=self.Agents[0].Train_epoch  #迭代次数
+        train_time=time.time()-self.Agents[0].Train_start  #训练时长
+        path_len=self.Agents[0].path_len   #当前航线长度
+        start2goal=self.Agents[0].start2goal  #起点与终点的距离
+        len_Astar=self.Agents[0].len_Astar   #Astar算法的航线长度
+        ReachGoal=self.Agents[0].reach_goal  #是否到达目标点
+        Train_info_line= {
+            'uuid':  str(uuid.uuid4()),  
+            'date': current_time,
+            'html_dir': '<html lang="en"></html>',
+            'train_score': train_score,
+            'epoch': epoch,
+            'Is_Scored': 0,
+            'ReachGoal': 0,
+            'train_time': train_time,
+            'path_len': path_len,
+            'score_quality': 0,
+            'score_len': 0,
+            'score_threaten': 0,
+            'start2goal':start2goal,
+            'len_Astar':len_Astar,
+            'ReachGoal':ReachGoal,
+        }
+        return Train_info_line
     def Run_statistics(self,info):
         #对运行结果进行统计
         self.result[info]=self.result[info]+1             #统计运行结果
@@ -377,9 +547,6 @@ class PathPlan_City(BaseEnv):
         #根据XML生成场景
         pass 
     
-    def render(self):
-        #可视化接口，利用已有信息进行环境可视化
-        pass
     
     def Load_Scene_FromXML(self,XML_path="../config/FMEC.xml"):
         #从xml文件中对环境成员进行配置，用于特定场景的强化学习训练或者训练效果测试
@@ -401,13 +568,13 @@ class PathPlan_City(BaseEnv):
                             self.Agents.append(obj_agent)
                 
                 #根据参数初始化Threaten
-                threaten_params=env_dict.get('Threatens')
+                threaten_params=env_dict.get('buildings')
                 if threaten_params != None:
-                    Threatens=threaten_params.get('Threaten')
-                    for threaten_param in Threatens:
+                    buildings=threaten_params.get('Threaten')
+                    for threaten_param in buildings:
                         obj_threaten=self.ThreatenFactory.Create_Threaten(threaten_param,self)
                         if obj_threaten != None:
-                            self.Threatens.append(obj_threaten)
+                            self.buildings.append(obj_threaten)
         
                 #根据参数初始化训练器
                 trainer_params=env_dict.get('Trainer')
@@ -603,14 +770,11 @@ class PathPlan_City(BaseEnv):
             item['UE_waiting_time']=0
             for ue in uav.UEs:
                 item['UE_waiting_time']+=ue.Caculate_wait_time  #统计每一个ue的等待时间
-            item['UE_waiting_time']=item['UE_waiting_time']/len(uav.UEs)   #平均等待时间
+            item['UE_waiting_time']=item['UE_waiting_time']/(len(uav.UEs)+1)   #平均等待时间
             #uav.infos.append(item) 
             re.append(item)
         return re
     
-    def render(self):
-        #可视化接口，利用已有信息进行环境可视化
-        pass
     
     def store_experience(self,replay):
         #存放经验信息

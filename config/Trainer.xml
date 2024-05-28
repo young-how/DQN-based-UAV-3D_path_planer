@@ -1,0 +1,37 @@
+<Trainer>
+    <Trainer_Type>SAC_Trainer</Trainer_Type>
+    <Is_Train>1</Is_Train>
+    <IsPriority_Replay>0</IsPriority_Replay>
+    <actor>
+        <NetWork>PolicyNetContinuous_SAC</NetWork>
+        <h>1</h>
+        <w>100</w>
+        <channel>1</channel>
+        <action_bound>1</action_bound>
+        <hiden_dim>64</hiden_dim>
+        <output>2</output>
+        <lr>0.0001</lr>
+    </actor>
+    <critic>
+        <NetWork>QValueNetContinuous_SAC</NetWork>
+        <h>1</h>
+        <w>100</w>
+        <channel>1</channel>
+        <hiden_dim>64</hiden_dim>
+        <action_dim>2</action_dim>
+        <lr>0.001</lr>
+    </critic>
+    <SAC_param>
+        <IS_Continuous>1</IS_Continuous>
+        <alpha_lr>0.0001</alpha_lr>
+        <target_entropy>1</target_entropy>
+        <gamma>0.99</gamma>
+        <tau>0.05</tau>
+    </SAC_param>
+    <Priority_Replay>0</Priority_Replay>
+    <replay_size>10000</replay_size>
+    <LEARNING_RATE>0.0005</LEARNING_RATE>
+    <Batch_Size>64</Batch_Size>
+    <max_epoch>100</max_epoch>
+    <save_loop>100</save_loop>
+</Trainer>

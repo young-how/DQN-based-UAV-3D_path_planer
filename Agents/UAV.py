@@ -2,6 +2,7 @@ import time
 from BaseClass.BaseAgent import *
 from BaseClass.CalMod import *
 from BaseClass.BaseCNN import *
+from PathPlan.RRT import *
 from GN import *
 import random
 import csv
@@ -22,6 +23,7 @@ class UAV(BaseAgent):
         self.j=param.get("j")  #无人机编号
         self.V_vector=Loc(0,0,0)  #速度矢量
         self.Max_V=int(param.get("Max_V"))   #最大速度
+        self.Steering_angle=float(param.get("Steering_angle"))/180*math.pi   #最大转向角
         self.V=self.Calc_V()     #计算速度大小
         #原实验设置
         self.R=int(param.get("R"))+0.5*self.j   #计算范围
@@ -40,6 +42,7 @@ class UAV(BaseAgent):
         self.path=[]  #路径点
         self.V_record=[]  #记录速度大小
         self.R_record=[]  #记录奖励大小
+        self.Trainer=None
         #读取能耗参数
         Power_param=param.get("Power_param")
         #飞行能耗参数
@@ -58,8 +61,6 @@ class UAV(BaseAgent):
         self.Communication_power=float(Power_param.get("Communication_power"))
         #UEs配置参数
         self.UEs_param=param.get("UEs_param")
-        #独有的训练器
-        self.Trainer=None
         #样本集合
         self.transition_dict= {'states': [], 'actions': [], 'next_states': [], 'rewards': [], 'dones': []}
         self.env=env  #设置所处的环境
@@ -104,7 +105,7 @@ class UAV(BaseAgent):
         self.DSN_gamma=float(self.DSNs_param.get("DSN_gamma"))  #技能奖励折扣
         self.DSN_Trainer=[] 
         self.DSNs=[] 
-        self.Load_DSN()  #载入DSN训练器
+        #self.Load_DSN()  #载入DSN训练器
         #DFRL训练所需参数
         self.DFRL_param=param.get("DFRL_param")   #DFRL配置参数
         self.update_rate=float(self.DFRL_param.get("update_rate"))   #更新率配置参数
@@ -118,7 +119,7 @@ class UAV(BaseAgent):
         self.goal_ind=0
         #其他测试的SPN
         self.SPNs=[]
-        self.Load_SPN()
+        #self.Load_SPN()
         #训练时间与测试时间统计
         self.Train_time=0
         self.Testing_time=0
@@ -128,26 +129,101 @@ class UAV(BaseAgent):
         #状态空间生成的函数
         self.state_function_name=param.get("state_function_name")
         self.state_function= getattr(self,self.state_function_name)
+        #用于目标点搜索的参数
+        self.goal=Loc(470,470,0)
+        #数据收集情况
+        self.data_num=0
+        #Astar算法模块
+        self.sub_granularity=int(param.get("sub_granularity"))# 子任务粒度
+        self.map_granularity=int(param.get("map_granularity")) # 任务栅格粒度
+        #self.granularity=1 # 粒度调整
+        self.Planner=RRTPlanner(self.env)  #RRT算法
+        self.sub_goals=[]  #拆分的子目标集合
+        self.APF_Enabled=int(param.get("APF_Enabled"))  #是否支持APF方法
+        #生成子任务
+        _,path=self.Cal_SubTask(self.goal)
+        #训练统计数据，存放到数据库中
+        self.total_score=0   #整个任务的得分
+        self.Train_start=time.time()  #训练开始的时间
+        self.Train_pointcut=time.time()  #统计切点的时间
+        self.path_len=0     #当前航线的长度
+        self.Train_epoch=0   #当前迭代次数
+        self.reach_goal=0  #是否到达目标点
+        self.start2goal=Eu_Loc_distance(self.position,self.sub_goals[-1])  #记录目标点与起点的距离
+        self.len_Astar=calculate_path_len(path)    #调用Astar算法得到的航线长度。
 
-        #补充实验参数设置
-        if self.j==0:
-            self.R=int(param.get("R"))+0.5*self.j   #计算范围
-            self.R_comm=int(param.get("R_comm"))   #通讯范围
-            self.ac=int(param.get("Acceration"))  #加速度大小
-            self.Max_Step=int(param.get("Max_Step"))   #最大步长
-            self.Step=0
-            self.f_max=float(param.get("f_max"))   #时钟频率
-            self.A=float(Fly_power.get("A"))
-            self.xi=0.8   #异构参数
-        else:
-            self.R_comm=60  #通讯范围60,70,80,90,100
-            self.ac=int(param.get("Acceration"))  #加速度大小
-            self.Max_Step=int(param.get("Max_Step"))   #最大步长
-            self.Step=0
-            self.f_max=float(param.get("f_max"))  #时钟频率
-            self.A=float(Fly_power.get("A"))
-            self.xi=0.8  #异构参数
+    #根据subgoal与周边障碍物的情况微调subgoal位置(斥力与引力模型)
+    def Adjust_subgoal(self):
+        new_sub_goals=[]
+        subgoal_mindis=[]   #子目标点与威胁的最小距离
+        for subgoal in self.sub_goals:
+            total_force=Loc(0,0,0)
+            total_force=self.cal_force(subgoal)  #计算合力
+            new_goal=subgoal+total_force
+            new_sub_goals.append(new_goal)
+            subgoal_mindis.append(self.cal_minDis2threaten(new_goal))   #加入与障碍物距离最小的距离
+        self.sub_goals=new_sub_goals
+        return False
+    def cal_minDis2threaten(self,new_goal):
+        #计算新的子目标点与所有障碍物的最小距离
+        min_dis=9999
+        for threaten in self.env.buildings:
+            min_dis=min(min_dis,Eu_Loc_distance(new_goal,threaten.position)-threaten._R)
+        return min_dis
 
+    def cal_force(self,subgoal):
+        #计算某个子目标与威胁之间的斥力(只考虑阈值范围内的威胁)
+        cum_force=0 #累积受力，过大会触发重新规划
+        f=Loc(0,0,0)  #初始化合力
+        total_force=Loc(0,0,0)
+        for threaten in self.env.buildings:
+            if threaten.v.x==0 and threaten.v.y==0 and threaten.v.z==0:
+                #威胁没有速度
+                continue
+            dis=Eu_Loc_distance(subgoal,threaten.position)  #与威胁圆心的直线距离
+            
+            dis2edge=dis-threaten._R   #距离威胁边缘的半径
+            if dis2edge>60:
+                continue  #距离过远，不考虑作用力
+            w=1  #引力参数
+            v=Eu_Loc_distance(Loc(0,0,0),threaten.v)  #计算威胁的速度大小
+            f_threaten1=min(1,w*threaten._R/(dis2edge*dis2edge))   #引力or斥力大小
+            f_threaten1_seta=calculate_angle(subgoal,threaten.position)   #引力方向，记住目标点->威胁中心的方向角
+            f_threaten1_vec=Loc(0,0,0)
+            v_threaten_seta=calculate_angle(Loc(0,0,0),threaten.v)   #计算威胁速度的方位角
+
+            #只考虑斥力
+            if dis2edge<0:
+                f_threaten1=max(-dis2edge,2)  #在威胁内部，另外考虑斥力大小
+            f_threaten1_vec=Loc(-f_threaten1*math.cos(f_threaten1_seta),-f_threaten1*math.sin(f_threaten1_seta),0)
+            
+            f_threaten2=min(1,v*threaten._R/(dis2edge*dis2edge))  #运动力大小
+            f_threaten2_vec=Loc(f_threaten2*math.cos(v_threaten_seta),f_threaten2*math.sin(v_threaten_seta),0)   #运动力的向量
+            cum_force+=(f_threaten1+f_threaten2)  #加上运动力和引力斥力
+            total_force=total_force+f_threaten1_vec+f_threaten2_vec  #力的合并
+
+            if cum_force>100:
+                #累积力过大，应当重新规划
+                self.Cal_SubTask_Dynamic()
+                return True
+            
+        return total_force
+
+    def Cal_SubTask_Dynamic(self,goal,Loc):
+        #动态预测环境下的子任务划分
+        pass
+
+    def Cal_SubTask(self,goal:Loc):
+        self.Planner.Set_StepSize(self.sub_granularity)  #设置Astar算法参数
+        Path,path_ori=self.Planner.getPath(self.position,goal)  #得到栅格路径，还需要将之转换为真实路径
+        if Path==None:
+            #没有得到路径
+            return None,None
+        #self.sub_goals=[self.position] #重置子任务集合
+        self.sub_goals=[]
+        for cp in Path:
+            self.sub_goals.append(cp)
+        return self.sub_goals,path_ori
     #载入测试用的SPN
     def Load_SPN(self):
         directory_path = root+"/.."+'/Mod/'  #存放DSN模型的路径
@@ -220,7 +296,7 @@ class UAV(BaseAgent):
         energy_cost=self.energy_cost_total
         task_collect=self.task_collect
         Energy_Efficent=self.task_collect/(self.energy_cost_total+0.001)
-        Covered_rate=len([UE for UE in self.UEs  if UE.Is_covered==1])/len(self.UEs)
+        Covered_rate=len([UE for UE in self.UEs  if UE.Is_covered==1])/(len(self.UEs)+1)
         task_executed=self.task_executed
         executed_rate=(task_executed/(task_collect+1))
         if len(avg_KL)==0:
@@ -249,53 +325,104 @@ class UAV(BaseAgent):
         self.Train_time+=(end-start)  #统计训练神经网络的时间
         return re
 
-    def reset(self):
-        self.Step=0
-        self.score=0
-        self.done=False
-        self.path=[] 
-        self.V_record=[]  #记录速度大小
-        self.R_record=[]  #记录奖励大小
-        self.position=Loc(int(self.param.get("position").get('x')),int(self.param.get("position").get('y')),int(self.param.get("position").get('z')))  #初始化在空间中的位置
-        self.V_vector=Loc(0,0,0)  #速度矢量
-        self.V=self.Calc_V()     #计算速度大小
-        self.infos=[]   #训练的反馈列表
-        #数据收集情况
-        self.data_num=0
-        #目标点
-        self.goal=Loc(75,65,0)
-        seta=random.uniform(0,2*math.pi)
-        self.goal=Loc(self.position.x+30*math.cos(seta),self.position.y+30*math.sin(seta),0)  #随机生成距离30m的终点
-        self.P_fly=self.Calc_Fly_Power()  #计算得到飞行功率
-        #构造UEs
-        self.UEs=[]
-        self.Covered_UEs=[]
-        self.comm_UEs=[]
-        self.num_covered_ue=0    #覆盖的可收集ue数目
-        self.num_comm_ue=0    # 通讯范围中的可收集ue数目
-        self.num_UEs=int(self.UEs_param.get('UES_num'))
-        for i in range(self.num_UEs):
-            param_ue=copy.copy(self.UEs_param)
-            param_ue['uav']=self
-            param_ue['position']=Loc(random.uniform(0,self.env.len),random.uniform(0,self.env.width),0)   #设置坐标
-            self.UEs.append(self.env.AgentFactory.Create_Agent(param_ue))
+    # def reset(self):
+    #     self.Step=0
+    #     self.score=0
+    #     self.done=False
+    #     self.path=[] 
+    #     self.V_record=[]  #记录速度大小
+    #     self.R_record=[]  #记录奖励大小
+    #     self.position=Loc(int(self.param.get("position").get('x')),int(self.param.get("position").get('y')),int(self.param.get("position").get('z')))  #初始化在空间中的位置
+    #     self.V_vector=Loc(0,0,0)  #速度矢量
+    #     self.V=self.Calc_V()     #计算速度大小
+    #     self.infos=[]   #训练的反馈列表
+    #     #数据收集情况
+    #     self.data_num=0
+    #     #目标点
+    #     self.goal=Loc(75,65,0)
+    #     seta=random.uniform(0,2*math.pi)
+    #     self.goal=Loc(self.position.x+30*math.cos(seta),self.position.y+30*math.sin(seta),0)  #随机生成距离30m的终点
+    #     self.P_fly=self.Calc_Fly_Power()  #计算得到飞行功率
+    #     #构造UEs
+    #     self.UEs=[]
+    #     self.Covered_UEs=[]
+    #     self.comm_UEs=[]
+    #     self.num_covered_ue=0    #覆盖的可收集ue数目
+    #     self.num_comm_ue=0    # 通讯范围中的可收集ue数目
+    #     self.num_UEs=int(self.UEs_param.get('UES_num'))
+    #     for i in range(self.num_UEs):
+    #         param_ue=copy.copy(self.UEs_param)
+    #         param_ue['uav']=self
+    #         param_ue['position']=Loc(random.uniform(0,self.env.len),random.uniform(0,self.env.width),0)   #设置坐标
+    #         self.UEs.append(self.env.AgentFactory.Create_Agent(param_ue))
 
-        self.Closed_UEs=[]   #附近可用的目标ue
-        self.energy_cost_total=0   #总消耗能量
-        self.task_collect=0  #总收集任务量
-        self.task_executed=0  #处理的任务总量
-        self.energy_efficient=0  #能效指标
-        self.cover_rate=0        #覆盖率指标
-        self.ue_waiting_time=0   #累计等待时间指标
-        self.sum_KL=[]        #累积KL散度值
-        #技能4所需状态
-        self.area_time=np.zeros((1,1,1,25))  #统计在九宫格每个区域的停留时间
-        self.area_task=np.zeros((1,1,1,25))  #统计在九宫格每个区域采集任务数目的时间
-        #最大覆盖贪心策略
-        self.goal_ind=0
-        #训练时间与测试时间统计
-        # self.Train_time=0
-        # self.Testing_time=0
+    #     self.Closed_UEs=[]   #附近可用的目标ue
+    #     self.energy_cost_total=0   #总消耗能量
+    #     self.task_collect=0  #总收集任务量
+    #     self.task_executed=0  #处理的任务总量
+    #     self.energy_efficient=0  #能效指标
+    #     self.cover_rate=0        #覆盖率指标
+    #     self.ue_waiting_time=0   #累计等待时间指标
+    #     self.sum_KL=[]        #累积KL散度值
+    #     #技能4所需状态
+    #     self.area_time=np.zeros((1,1,1,25))  #统计在九宫格每个区域的停留时间
+    #     self.area_task=np.zeros((1,1,1,25))  #统计在九宫格每个区域采集任务数目的时间
+    #     #最大覆盖贪心策略
+    #     self.goal_ind=0
+    #     #训练时间与测试时间统计
+    #     # self.Train_time=0
+    #     # self.Testing_time=0
+    def reset(self,option=None):
+        if option=="local reset":
+            #局部重置
+            self.Step=0
+            self.score=0
+            self.V=self.Calc_V()     #计算速度大小
+        else:
+            #全局重置
+            self.Step=0
+            self.score=0
+            self.done=False
+            self.path=[] 
+            self.V_record=[]  #记录速度大小
+            self.R_record=[]  #记录奖励大小
+            #根据配置文件生成起点坐标
+            #self.position=Loc(int(self.param.get("position").get('x')),int(self.param.get("position").get('y')),int(self.param.get("position").get('z')))  #初始化在空间中的位置
+            self.V_vector=Loc(5,3,0)  #速度矢量
+            seta=random.uniform(0,2*math.pi)   #随机初始化速度方向
+            self.V_dir=seta   #速度方向
+            self.V_vector.x=self.Max_V*math.cos(seta)
+            self.V_vector.y=self.Max_V*math.sin(seta)  #初始速度大小为Min_V
+            self.V=self.Calc_V()     #计算速度大小
+            self.infos=[]   #训练的反馈列表
+            #数据收集情况
+            self.data_num=0
+            #起点重置
+            # x=random.uniform(10,490)
+            # y=random.uniform(1,10)
+            # self.position=Loc(x,y,0)
+            self.position=Loc(20,20,10)   #固定起点
+            #目标点
+            #seta=random.uniform(0,2*math.pi)
+            x=random.uniform(10,490)
+            y=random.uniform(450,490)
+            #self.goal=Loc(x,y,0)
+            self.goal=Loc(480,480,25)  #固定目标点
+            _,Astar_path=self.Cal_SubTask(self.goal)  #子任务拆分
+            #记录子任务路径
+            # with open('path_subtask.csv', 'w', newline='') as csvfile:
+            #     csvwriter = csv.writer(csvfile)
+            #     for data in self.sub_goals:  # 假设有10次迭代
+            #         csvwriter.writerow([data.x,data.y,data.z])
+            #训练统计数据，存放到数据库中
+            self.total_score=0   #整个任务的得分
+            # self.Train_start=time.time()  #训练开始的时间
+            # self.Train_pointcut=time.time()  #统计切点的时间
+            self.path_len=0     #当前航线的长度
+            # self.Train_epoch=0   #当前迭代次数
+            self.reach_goal=0  #是否到达目标点
+            self.start2goal=Eu_Loc_distance(self.position,self.goal)  #记录目标点与起点的距离
+            self.len_Astar=calculate_path_len(Astar_path)    #调用Astar算法得到的航线长度。
     #选取动作
     def get_action(self,state,eps):
         start=time.time()
@@ -1725,133 +1852,176 @@ class UAV(BaseAgent):
 
     #航线规划
     def update_PathPlan(self,action):
-        start_SAC=time.time()   
+         #额外的判断条件
         global_r=0  #全局任务奖励
+        if len(self.sub_goals)==0:
+            #到达最终目标点
+            self.done=True
+            global_r+=(self.Max_Step-self.Step)  
+            self.score+=global_r
+            self.target_step=self.Step
+            return global_r,True,'success'
+        #action: 速度方向变化值（-1，1），为最大转向角的比例
         self.Step+=1    #全局步长统计
-        act=self.act[action]  #获取动作，得到加速度的大小与方向
-        #速度变更
-        self.V_vector.x=self.V_vector.x+act[0]*math.cos(act[1])
-        self.V_vector.y=self.V_vector.y+act[0]*math.sin(act[1])
-        self.V=self.Calc_V()   #计算速度大小,并自适应调整
-        self.P_fly=self.Calc_Fly_Power()  #计算得到飞行功率
-        sum_power=self.P_fly+self.Communication_power   #计算总功率
-        #判断相对位移
+        old_position=copy.copy(self.position)  #复制旧坐标
+        #速度方向变更
+        seta_old=calculate_angle(Loc(0,0,0),self.V_vector)  #计算速度的方位角
+        dis_old=Eu_Loc_distance(self.position,self.sub_goals[0])
+        dis2goal_old=Eu_Loc_distance(self.position,self.goal)
+        seta_new=seta_old+action[0]*self.Steering_angle   #单位弧度
+        self.V_vector.x=self.Max_V*math.cos(seta_new)
+        self.V_vector.y=self.Max_V*math.sin(seta_new)
+        self.V=self.Calc_V()   #计算新速度
+        #坐标变更
         self.position.x+=self.V_vector.x   #变更x坐标
         self.position.y+=self.V_vector.y    #变更y坐标
-        self.path.append([self.position.x,self.position.y,self.V])
-        self.V_record.append(self.V)
-        #更新UE任务卸载部分的状态
-        if self.position.x>=self.env.len:
-            self.V_vector.x=(-self.V_vector.x)  #速度反转
-            self.position.x+=self.V_vector.x   #变更x坐标
-            global_r-=1
-        if self.position.x<0:
-            self.V_vector.x=(-self.V_vector.x)  #速度反转
-            self.position.x+=self.V_vector.x   #变更x坐标
-            global_r-=1
-        if self.position.y>=self.env.width:
-            self.V_vector.y=(-self.V_vector.y)  #速度反转
-            self.position.y+=self.V_vector.y    #变更y坐标
-            global_r-=1
-        if self.position.y<0:
-            self.V_vector.y=(-self.V_vector.y)  #速度反转
-            self.position.y+=self.V_vector.y    #变更y坐标
-            global_r-=1
-        #UE运行
-        for ue in self.UEs:
-            ue.run()
-        #self.Closed_UEs = sorted(self.UEs , key=lambda ue: ue.dis2uav) #按距离大小排序
-        self.Covered_UEs  = [UE for UE in self.UEs  if UE.flag==1 and UE.Now_covered==1]   #筛选出可收集的
-        self.comm_UEs  = [UE for UE in self.UEs  if UE.flag==1 and UE.Now_covered==2]   #筛选出可通讯的ue
-        self.num_covered_ue=len(self.Covered_UEs)  #统计同时覆盖的UE数目，平均分配计算资源
-        self.num_comm_ue=len(self.comm_UEs)
-        #更新状态
-        #global_r+=(-0.01)*sum_power   #能量消耗惩罚
-        self.energy_cost_total+=sum_power  #统计消耗的能量(焦耳 J)
-        #统计25宫格的区域信息
-        old_area_task=copy.copy(self.area_task)  #上一时刻的区域停留时间
-        ind_x=int(self.position.x/100)   #x区域号
-        ind_y=int(self.position.y/100)   #y区域号
-        ind=ind_y*5+ind_x
-        self.area_time[0,0,0,ind]+=1     #增加停留时间
-        #无人机采集数据
-        cpu_rate=0   #cpu利用率
-        for ue in self.Covered_UEs:
-            if ue.Now_covered==1:  #判断可收集UE
-                #收集任务
-                task=ue.trans()  #上传的任务量
-                self.task_collect+=task     #收集的任务数目              
-                #计算处理
-                executed_task_cycle=self.f_max/self.num_covered_ue  #分配cpu周期数
-                calcuated_task=ue.Calc_task(executed_task_cycle)   #真实处理的任务数目（周期数）
-                cpu_rate+=calcuated_task              #统计cpu利用率
-                calcuated_task=calcuated_task/ue.F*ue.D       #转换成KB
-                self.task_executed+=calcuated_task     #统计处理过的任务数目
-                self.area_task[0,0,0,ind]+=calcuated_task    #增加区域计算过的任务数目
-                #global_r+=(calcuated_task/sum_power)/10       #奖励为能效值
-                #global_r+=(0.01*calcuated_task*(1+0*self.task_executed))
-                #所有累积任务都处理完毕,获得额外奖励
-                if (ue.D_t<=ue.D and ue.F_t<=ue.F) or (ue.F_t==ue.D_t/ue.D*ue.F and ue.D_t<ue.Max_D*0.1):
-                    ue.reset()
-        #覆盖惩罚
-        sum_d=len([UE for UE in self.UEs if UE.Is_covered==0])   #统计没有被覆盖到的UEs数目
-        global_r-=((sum_d/100)**2)  #未被覆盖的UE越多，惩罚越大
-        #最大化cpu利用率
-        #global_r-=((self.f_max-cpu_rate)*sum_power/100)**2/5
-        #UE待处理任务的惩罚
-        # sum_F=len([UE.F_t for UE in self.UEs])   #统计所有UEs的待处理任务
-        # global_r-=((sum_F/100)**2)  #未被覆盖的UE越多，惩罚越大
-        #global_r=global_r*5
-        end_SAC=time.time()
-        time_SAC=end_SAC-start_SAC
+        #计算速度方位和子目标终点方位的差值
+        tri_goal=calculate_angle(self.position,self.sub_goals[0])
+        tri_V=calculate_angle(Loc(0,0,0),self.V_vector)  #速度的方向
+        #z轴坐标变化
+        if action[1]<0.2:
+            self.position.addZ(-0.1)
+        elif action[1]>0.8:
+            self.position.addZ(0.1)
+        if self.env.Threaten_rate(self.position)==1:
+            global_r-=0.1   #如果当前在威胁中，则给予惩罚
+            self.position=old_position  #重置坐标
+        dis_new=Eu_Loc_distance(self.position,self.sub_goals[0])
+        dis2goal_new=Eu_Loc_distance(self.position,self.goal)
+        self.path.append([self.position.x,self.position.y,self.position.z])
+        self.V_record.append(Eu_Loc_distance(self.position,self.sub_goals[0]))
+        #奖励值设置
+        global_r-=0.13*abs(action[0])  #转向角度越大，惩罚越高
+        global_r+=0.2*math.cos(abs(tri_goal-tri_V))
+        global_r+=0.4*(dis_old-dis_new)  #靠近子任务目标点的奖励 
+        global_r+=0.4*(dis2goal_old-dis2goal_new)   #靠近最终任务目标点的奖励 
+        global_r-=0.1  #每走一步就惩罚一次
+        if len(self.sub_goals)>=1:
+            global_r-=0.01*abs(self.position.z-self.sub_goals[0].z)  #z轴高度差的惩罚
         self.R_record.append(global_r)  #记录奖励大小
+        #统计当前航线长度,迭代次数
+        self.path_len+=self.V
+        self.Train_epoch+=1
+        
+
+        #动态威胁环境下的模型训练
+        if self.APF_Enabled==1:
+            self.Adjust_subgoal()  #调整子目标点，适用于动态环境
+            total_force=self.cal_force(self.position)  #计算该目标点的受力向量
+            force=Eu_Loc_distance(Loc(0,0,0),total_force)  #计算力的大小
+            tri_force=calculate_angle(Loc(0,0,0),total_force)  #计算力的方位角
+            global_r+=0.2*force*math.cos(abs(tri_force-tri_V))  #如果速度方向与力的方向一致，加分，否之扣分
+
+        
         if self.Step>=self.Max_Step:
             self.done=True
+            global_r+=(50-Eu_Loc_distance(self.position,self.sub_goals[0]))
             self.score+=global_r
-            # with open('path.csv', 'w', newline='') as csvfile:
-            #     csvwriter = csv.writer(csvfile)
-            #     for data in self.path:  # 假设有10次迭代
-            #         csvwriter.writerow(data)
+            self.total_score+=global_r  #统计总得分
+            with open('path.csv', 'w', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                for data in self.path:  # 假设有10次迭代
+                    csvwriter.writerow(data)
+            return global_r,True,'lose'
+        elif Eu_Loc_distance(self.position,self.sub_goals[0])<7 or (Eu_Loc_distance(self.position,self.goal)<Eu_Loc_distance(self.sub_goals[0],self.goal)):
+            #到达子目标点或者当前的位置比子目标点更加接近于目标点
+            global_r+=(50-Eu_Loc_distance(self.position,self.sub_goals[0]))
+            self.sub_goals.pop(0)
+            if len(self.sub_goals)==0:
+                #到达最终目标点
+                global_r+=50
+                self.done=True
+                global_r+=(self.Max_Step-self.Step)  
+                self.score+=global_r
+                self.target_step=self.Step
+                self.reach_goal=1  #统计信息，到达目标点
+                self.total_score+=global_r  #统计总得分
+                with open('path.csv', 'w', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile)
+                    for data in self.path:  # 假设有10次迭代
+                        csvwriter.writerow(data)
+                return global_r,True,'success'
+            else:
+                #到达子目标目标点
+                self.reset("local reset")  #局部重置
+                #计算速度方位和子目标终点方位的差值
+                tri_goal=calculate_angle(self.position,self.sub_goals[0])
+                tri_V=calculate_angle(Loc(0,0,0),self.V_vector)
+                global_r+=0.2*math.cos(abs(tri_goal-tri_V))
+                global_r+=(self.Max_Step-self.Step)  
+                self.score+=global_r
+                self.total_score+=global_r  #统计总得分
+                self.target_step=self.Step
+                return global_r,True,'success'
+        elif Eu_Loc_distance(self.position,self.goal)<7:
+            #到达最终目标点
+            self.done=True
+            global_r+=50
+            global_r+=(self.Max_Step-self.Step)  
+            self.score+=global_r
+            self.target_step=self.Step
+            self.reach_goal=1  #统计信息，到达目标点
+            self.total_score+=global_r  #统计总得分
+            with open('path.csv', 'w', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                for data in self.path:  
+                    csvwriter.writerow(data)
             return global_r,True,'success'
         else:
             self.score+=global_r
+            self.total_score+=global_r  #统计总得分
             return global_r,False,'normal' 
 
     def state_PathPlan(self):
-        state_start=time.time()
         #所有技能所需要的状态空间
-        self.Min_dis=self.R
-        state_map=np.zeros((1,1,1,87))
-        state_map[0,0,0,0]=self.Step/150
-        state_map[0,0,0,1]=self.position.x/500
-        state_map[0,0,0,2]=self.position.y/500
-        state_map[0,0,0,3]=self.V_vector.x/20
-        state_map[0,0,0,4]=self.V_vector.y/20
-        state_map[0,0,0,5]=self.task_executed/10000
-        #停留时间（25维度）
-        state_map[0,0,0,6:31]=self.area_time[0,0,0,:]/10
-        #通讯半径内的UEs信息（28维）
-        for ind,ue in enumerate(self.comm_UEs):
-            if ind >=7:  #覆盖范围内可收集的ue的信息
-                break
-            #相对位置
-            dx=ue.position.x-self.position.x
-            dy=ue.position.y-self.position.y
-            state_map[0,0,0,31+4*ind]=dx/100
-            state_map[0,0,0,32+4*ind]=dy/100
-            state_map[0,0,0,33+4*ind]=ue.F_t/5
-            state_map[0,0,0,34+4*ind]=ue.trans_rate/1000
-        #覆盖半径内的UEs信息（28维）
-        for ind,ue in enumerate(self.Covered_UEs):
-            if ind >=7:  #覆盖范围内可收集的ue的信息
-                break
-            #相对位置
-            dx=ue.position.x-self.position.x
-            dy=ue.position.y-self.position.y
-            state_map[0,0,0,59+3*ind]=dx/100
-            state_map[0,0,0,60+3*ind]=dy/100
-            state_map[0,0,0,61+3*ind]=ue.F_t/5
-            state_map[0,0,0,62+4*ind]=ue.trans_rate/1000
-        state_end=time.time()
-        time_p=state_end-state_start
-        return copy.copy(state_map[0,0,0,:]) 
+        state_map=np.zeros((1,1,1,100))
+        state_map[0,0,0,0]=self.Step/100
+        if len(self.sub_goals)>=1:
+            state_map[0,0,0,1]=(self.sub_goals[0].x-self.position.x)/10
+            state_map[0,0,0,2]=(self.sub_goals[0].y-self.position.y)/10
+            state_map[0,0,0,3]=(self.sub_goals[0].z-self.position.z)/10
+        state_map[0,0,0,4]=self.V   #速度大小
+        state_map[0,0,0,5]=self.V_vector.x
+        state_map[0,0,0,6]=self.V_vector.y
+        state_map[0,0,0,7]=calculate_angle(Loc(0,0,0),self.V_vector) #速度方向
+        #下一个子目标点
+        if len(self.sub_goals)>=2:
+            state_map[0,0,0,8]=(self.sub_goals[1].x-self.position.x)/10
+            state_map[0,0,0,9]=(self.sub_goals[1].y-self.position.y)/10
+            state_map[0,0,0,10]=(self.sub_goals[1].z-self.position.z)/10
+        #无人机附近的威胁状况，周围5*5个1m栅格的威胁情况
+        for i in range(5):
+            for j in range(5):
+                dx=(i-2)
+                dy=(j-2)
+                test_ndoe=Loc(self.position.x+dx,self.position.y+dy,self.position.z)
+                threaten=self.env.Threaten_rate(test_ndoe)
+                state_map[0,0,0,11+5*i+j]=threaten
+        #无人机附近的威胁状况，周围5*5个5m栅格的威胁情况
+        for i in range(5):
+            for j in range(5):
+                dx=(i-2)
+                dy=(j-2)
+                test_ndoe=Loc(self.position.x+5*dx,self.position.y+5*dy,self.position.z)
+                threaten=self.env.Threaten_rate(test_ndoe)
+                state_map[0,0,0,36+5*i+j]=threaten
+        #无人机附近的威胁状况，周围5*5个10m栅格的威胁情况
+        for i in range(5):
+            for j in range(5):
+                dx=(i-2)
+                dy=(j-2)
+                test_ndoe=Loc(self.position.x+10*dx,self.position.y+10*dy,self.position.z)
+                threaten=self.env.Threaten_rate(test_ndoe)
+                state_map[0,0,0,61+5*i+j]=threaten
+        #最终终点
+        state_map[0,0,0,86]=(self.goal.x-self.position.x)/10
+        state_map[0,0,0,87]=(self.goal.y-self.position.y)/10
+        state_map[0,0,0,88]=(self.goal.z-self.position.z)/10
+        state_map[0,0,0,89]=self.position.z/10  #自身的高度
+        #当前位置下5m的障碍物情况
+        state_map[0,0,0,90]=self.env.Threaten_rate(Loc(self.position.x,self.position.y,self.position.z-1))
+        state_map[0,0,0,91]=self.env.Threaten_rate(Loc(self.position.x,self.position.y,self.position.z-2))
+        state_map[0,0,0,92]=self.env.Threaten_rate(Loc(self.position.x,self.position.y,self.position.z-3))
+        state_map[0,0,0,93]=self.env.Threaten_rate(Loc(self.position.x,self.position.y,self.position.z-4))
+        state_map[0,0,0,94]=self.env.Threaten_rate(Loc(self.position.x,self.position.y,self.position.z-5))
+        return copy.copy(state_map[0,0,0,:])

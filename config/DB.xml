@@ -1,0 +1,9 @@
+<DB>
+    <host>localhost</host>
+    <user>root</user>
+    <password>yh5182072</password>
+    <database>Project2</database>
+    <tables>
+        <table>TrainInfo_Json</table>
+    </tables>
+</DB>

@@ -1,0 +1,30 @@
+<UI>
+    <x_axis3d_opts>
+        <MAX>500</MAX>
+        <MIN>0</MIN>
+        <split_number>20</split_number>
+    </x_axis3d_opts>
+    <y_axis3d_opts>
+        <MAX>500</MAX>
+        <MIN>0</MIN>
+        <split_number>20</split_number>
+    </y_axis3d_opts>
+    <z_axis3d_opts>
+        <MAX>500</MAX>
+        <MIN>0</MIN>
+        <split_number>20</split_number>
+    </z_axis3d_opts>
+    <InitOpt>
+        <width>"1800px"</width>
+        <height>"800px"</height>
+    </InitOpt>
+    <Grid3DOpt>
+        <width>200</width>
+        <height>200</height>
+        <depth>200</depth>
+    </Grid3DOpt>
+    <path>
+        <path_file>./path.csv</path_file>
+    </path>
+    
+</UI>

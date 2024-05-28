@@ -9,7 +9,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../Agents')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../Envs') 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../BaseClass')
 from BaseClass.CalMod import *
-from Envs.Car_Driving_Env import *
 
 class AstarPlanner():
     def __init__(self,env):
