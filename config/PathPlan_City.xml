@@ -1,7 +1,7 @@
 
 <simulator>
     <env>
-        <Env_Type>PathPlan_City</Env_Type>
+        <Env_Type>PathPlan_City</Env_Type> 
         <len>500</len>
         <width>500</width>
         <h>100</h>

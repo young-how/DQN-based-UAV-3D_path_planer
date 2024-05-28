@@ -1,110 +1,92 @@
-🌍
-*∙ [简体中文](README.md)∙ [English](README-el.md)
+# RLGF  ![](https://img.shields.io/badge/license-MIT-blue) ![](https://img.shields.io/badge/jdk-1.8%2F17-green) ![](https://img.shields.io/badge/python-3.97-blue) ![](https://img.shields.io/badge/MySQL-10.3.19-red) ![](https://img.shields.io/badge/Pytorch-1.11.0-lightgreen) ![](https://img.shields.io/badge/DRL-SAC-yellow) ![](https://img.shields.io/badge/DRL-DQN-yellow) ![](https://img.shields.io/badge/DRL-DDPG-yellow) ![](https://img.shields.io/badge/DRL-DDQN-yellow) ![](https://img.shields.io/badge/DRL-PPO-yellow) ![](https://img.shields.io/badge/DRL-AC-yellow) ![](https://img.shields.io/badge/DRL-DuelingDQN-yellow)
 
-# 基于DQN算法的无人机三维城市空间航线规划
-本文基于强化学习算法DQN实现离散3维城市空间环境下的智能航线规划，能根据无人机感知进行避障，并根据风速情况选择能耗较低的路线。
+RLGF是一个适用于无人机深度强化学习任务的通用训练框架，构建了适用于无人机任务的动作模型，包括连续飞行动作与离散飞行动作。预置了飞行能量消耗模型与航线规划模型。能够根据自身任务自定义任务环境模型与无人机模型。并集成了多种主流的深度强化学习算法。
++ 自定义开发： 该框架以配置XML文件的形式制定无人机强化学习任务，隐藏了深度强化学习过程的过程。仅需要重写环境模型与无人机模型中特定的函数，便能快速实现自定义无人机任务的开发。
++ 多算法集成： 集成了主流的强化学习算法如DQN、AC、DDQN、DuelingDQN、PPO、SAC、DDPG，仅需通过配置XML文件即可快速更换任务所需算法进行训练。
++ 无人机参数自定义： 能够根据XML文件配置无人机的性能参数，包括加速度、动作更新函数、状态空间函数、APF动态避障模式是否启用、初始坐标、最大/最小速度、最大转向角、最大任务时间步长、子任务粒度、飞行功耗参数（不同速度下无人机的飞行功耗不同）、通信功率等。也支持自定义无人机参数并载入进自定义的无人机模型。
++ 训练日志支持: 能够将训练过程中的参数以csv的形式保存在logs文件夹下（需自定义保存形式）。
++ 多维度无人机轨迹结果可视化：每轮任务迭代后将生成轨迹以HTML的形式保存在/DataBase/experience目录下。若本地或者服务器配置有MySQL数据库，可以通过提供的接口将航线数据存放到数据库中，并通过PathViewer的java后端项目实现每次迭代任务的无人机轨迹动态可视化。
++ 支持私密消息： 服务端能够通过特定指令向公屏发送指定用户可见的私密消息，可用于文字交互游戏的角色分发。
 
-## 环境需求
-python 3.7
+## 开发环境
++ 训练环境： Python 3.9.7, Pytorch 1.11.0.
++ 可视化平台： jdk 17, Spring 6.15, maven, MySQL 10.3.19.
 
-pytorch(cuda)
-## 模型简介
-在x100 y100 z22的三维空间中，采用课程学习方式对无人机智能体进行训练，利用设置好的不同难度的课程对智能体进行梯度训练，能让智能体更快地获取决策经验。由于训练初期缺乏决策经验，需要随机选择行为对环境进行试探，本文设置随机试探周期为1000，周期内采用ε-贪心策略选择智能体行为，周期内贪心概率从1逐渐递减到0.01。1000周期后贪心概率保持在0.01。在一个周期的训练场景中随机生成15个无人机对象，当所有无人机进入终止状态（电量耗尽、坠毁、到达目标点、超过最大步长）后进入下一个周期的训练，当80%以上的无人机能够到达目标点时进入下一难度等级的训练。
-经过13万周期、19小时的迭代训练，最终无人机智能体能够在难度10的环境中以较高的任务完成率安全到达目标点。
+## 项目目录简介
 
-![avatar](航迹图.jpg)
-## 项目说明 
-DQN.py:(main函数 入口1)设置模型训练参数与城市环境参数，对DQN模型进行训练，输出Qlocal.pth与Qtarget.pth文件
+- RLGF/
+  - README.md
+  - Agents/     &nbsp;&nbsp;&nbsp;#智能体模型所在目录，存放无人机或其他有关的智能体模型
+  - BaseClass/ &nbsp;&nbsp;&nbsp;#存放基本的模型基类，以及通用计算工具
+  - config/
+    - buildings.xml  &nbsp;&nbsp;&nbsp;#环境中的建筑物配置文件。
+    - DB.xml  &nbsp;&nbsp;&nbsp;#数据库配置，若无数据库，可以忽略。
+    - PathPlan_City.xml &nbsp;&nbsp;&nbsp;#案例环境模型的配置文件，定义了1个UAV在建筑群中执行航线规划任务。
+    - Trainer.xmll &nbsp;&nbsp;&nbsp;#所采用的训练器的配置文件。
+    - UAV.xml &nbsp;&nbsp;&nbsp;#案例无人机配置文件，定义了UAV在轨迹规划任务中的相关配置。
+    - UI.xml &nbsp;&nbsp;&nbsp;#PyEchart配置文件，不建议更改。
+  - DataBase/
+    - experience/   &nbsp;&nbsp;&nbsp;#以html的形式存放无人机的轨迹结果（静态）。
+    - Connector.py &nbsp;&nbsp;&nbsp;#提供连接数据库的功能。
+  - Env/  &nbsp;&nbsp;&nbsp;#存放环境模型类。
+  - FactoryClass/  &nbsp;&nbsp;&nbsp;#对应的工厂类。
+  - Mod/  &nbsp;&nbsp;&nbsp;#存放神经网络模型。
+  - Obstacles/  &nbsp;&nbsp;&nbsp;#存放自定义的障碍物类。
+  - Trainer/  &nbsp;&nbsp;&nbsp;#存放已经实现的强化学习算法训练器。
+  - simulator.py &nbsp;&nbsp;&nbsp;#训练器启动器。
 
+## 基本使用案例
 
-watch_uav.py：(main函数 入口2)对训练好的决策模型进行测试，载入Qlocal.pth与Qtarget.pth文件，对无人机航迹规划过程进行可视化
+### 模型训练：
 
-![avatar](path1.gif) ![avatar](path2.gif)
+修改案例环境配置文件PathPlan_City。
+```
+<simulator>
+    <env>
+        <Env_Type>PathPlan_City</Env_Type>   <!-- 自定义环境模型名称，与py文件名一致-->
+        <len>500</len>  <!-- 环境规划空间长度-->
+        <width>500</width>  <!-- 环境规划空间宽度-->
+        <h>100</h>  <!-- 环境规划空间高度-->
+        <eps>0.1</eps>  <!-- epslon最小贪心概率-->
+        <Is_AC>0</Is_AC> 
+        <Is_FL>0</Is_FL>   <!-- 是否启用联邦学习进行分布式训练（需要多个智能体）-->
+        <Is_On_Policy>0</Is_On_Policy> 
+        <FL_Loop>3</FL_Loop> 
+        <print_loop>2</print_loop>
+        <num_UAV>1</num_UAV> <!-- 无人机数目-->
+        <Agent>
+            <xml_path_agent>./config/UAV.xml</xml_path_agent>   <!-- 案例无人机的配置文件-->
+            <Trainer>
+                <Trainer_path>./config/Trainer.xml</Trainer_path>  <!-- 训练器的配置文件-->
+            </Trainer>
+        </Agent>
+        <Obstacles>
+            <buildings>./config/buildings.xml</buildings>  <!-- 建筑物分布的配置文件-->
+        </Obstacles>
+        <UI>
+            <UI_path>./config/UI.xml</UI_path>
+        </UI>
+        <DB>
+            <DB_path>./config/DB.xml</DB_path>  <!-- 数据库配置文件-->
+        </DB>
+    </env>
+    <record_epo>10</record_epo> 
+    <num_episodes>500</num_episodes>   <!-- 迭代次数-->
+    <max_eps_episode>1</max_eps_episode>
+    <min_eps>0.1</min_eps>
+    <TARGET_UPDATE>3</TARGET_UPDATE>
+</simulator>
+```
 
-env.py：设置env类，对城市环境进行描述，实现该环境中的所有UAV与传感器运行的仿真模拟
+运行simulator.py文件，即可启动训练过程。支持断点训练。每次运行会在/logs生成一个日志，可以查看每轮次训练的得分详情。并在/DataBase/experience目录下生成无人机轨迹。
 
-model.py：神经网络模型的定义
+训练过程：
+![](doc/train.gif)
 
-replay_buffer.py：经验池的定义
+每个训练轮次生成的静态轨迹HTML
+![](doc/path1.png)
+![](doc/path2.png)
+![](doc/path3.png)
 
-UAV.py：定义UAV类，对无人机的自身参数与行为进行描述
-
-## 系统框架
-![avatar](DQN无人机航迹规划系统框架图.jpg)
-## 训练参数设置 
-env.py:
-~~~ 
-  env.reset()  #对仿真环境中的房屋建筑集合、无人机集合、传感器集合进行随机生成，对训练环境进行初始化 
-  
-  #Set the simulation environment parameters
-  env. __init__() #对仿真环境参数进行设置
-~~~
-DQN.py
-~~~ 
-  BATCH_SIZE = 128    #批量大小
-  TAU = 0.005 
-  gamma = 0.99   #折扣率
-  LEARNING_RATE = 0.0004   #学习率
-  TARGET_UPDATE = 10   #Q网络更新周期 
-  num_episodes = 40000  #训练周期长度 
-  print_every = 1  
-  hidden_dim = 16 ## 64 ## 16 #隐藏层维数 
-  min_eps = 0.01    #贪心概率
-  max_eps_episode = 10   #最大贪心次数
-  space_dim = 42 # n_spaces   状态空间维度
-  action_dim = 27 # n_actions   动作空间维度
-  threshold = 200    
-~~~
-UAV.py:
-~~~ 
-  UAV. __init__()  #对UAV的参数进行设置
-~~~
-## 无人机状态空间
-UAV.py:
-~~~ 
-def state(self):
-        dx=self.target[0]-self.x
-        dy=self.target[1]-self.y
-        dz=self.target[2]-self.z
-        state_grid=    [self.x,self.y,self.z,dx,dy,dz,self.target[0],self.target[1],self.target[2],self.d_origin,self.step,self.distance,self.dir,self.p_crash,self.now_bt,self.cost]
-        #更新临近栅格状态  Update adjacent grid state
-        self.ob_space=[]
-        for i in range(-1,2):
-            for j in range(-1,2):
-                for k in range(-1,2):
-                    if i==0 and j==0 and k==0:
-                        continue
-                    if self.x+i<0 or self.x+i>=self.ev.len or self.y+j<0 or self.y+j>=self.ev.width or self.z+k<0 or self.z+k>=self.ev.h:
-                        self.ob_space.append(1) 
-                        state_grid.append(1)
-                    else:
-                        self.ob_space.append(self.ev.map[self.x+i,self.y+j,self.z+k])  #添加无人机临近各个栅格状态
-                        state_grid.append(self.ev.map[self.x+i,self.y+j,self.z+k])
-        return state_grid  #无人机状态向量
-~~~
-
-## 奖励函数设置
-UAV.py:
-
-无人机未到达终止状态（未到达终点、未坠毁、为超最大步长）
-~~~
-        #计算总奖励 
-        r=r_climb+r_target+r_e-crash*self.p_crash   
-~~~
-无人机到达终止状态
-~~~
-        #终止状态判断
-        if self.x<=0 or self.x>=self.ev.len-1 or self.y<=0 or self.y>=self.ev.width-1 or self.z<=0 or self.z>=self.ev.h-1 or self.ev.map[self.x,self.y,self.z]==1 or random.random()<self.p_crash:
-            #发生碰撞，产生巨大惩罚
-            return r-200,True,2
-        if self.distance<=5:
-            #到达目标点，给予大量奖励
-            #self.ev.map[self.x,self.y,self.z]=0
-            return r+200,True,1 
-        if self.step>=self.d_origin+2*self.ev.h:
-            #步数超过最差步长，给予惩罚
-            return r-20,True,5
-        if self.cost>self.bt:
-            #电量耗尽，给予大量惩罚
-            return r-20,True,3
-~~~
+基于cesium的训练过程动态可视化
+![](doc/sample2.gif)

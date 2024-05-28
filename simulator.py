@@ -73,11 +73,13 @@ class simulator():
 
     def Init_Record_Mod(self):
         #初始化训练记录模块
-        file=open(self.result_path,'a+',newline="")
-        self.CsvWriter=csv.writer(file)
-        #self.CsvWriter.writerow(["sum_Episode","Episode"," Score"," Avg.Score","eps-greedy","success","failed","meet_threaten",'loss','step'])
-        self.CsvWriter.writerow(["sum_Episode","Episode"," Score"," Avg.Score","eps-greedy","success","failed","meet_threaten",'loss','step','avg_trainning_time','avg_testing_time','total_time'])
- 
+        try:
+            file=open(self.result_path,'a+',newline="")
+            self.CsvWriter=csv.writer(file)
+            self.CsvWriter.writerow(["sum_Episode","Episode"," Score"," Avg.Score","eps-greedy","success","failed","meet_threaten",'loss','step','avg_trainning_time','avg_testing_time','total_time'])
+        except Exception as e:
+            print(e)
+    
     def Init_From_XML(self,XML_path=root+'/config/PathPlan_City.xml'):
         #根据配置文件初始化模拟器参数,根据工厂类生成 env类
         try:
