@@ -1,4 +1,5 @@
 # RLGF  ![](https://img.shields.io/badge/license-MIT-blue) ![](https://img.shields.io/badge/jdk-1.8%2F17-green) ![](https://img.shields.io/badge/python-3.97-blue) ![](https://img.shields.io/badge/MySQL-10.3.19-red) ![](https://img.shields.io/badge/Pytorch-1.11.0-lightgreen) ![](https://img.shields.io/badge/DRL-SAC-yellow) ![](https://img.shields.io/badge/DRL-DQN-yellow) ![](https://img.shields.io/badge/DRL-DDPG-yellow) ![](https://img.shields.io/badge/DRL-DDQN-yellow) ![](https://img.shields.io/badge/DRL-PPO-yellow) ![](https://img.shields.io/badge/DRL-AC-yellow) ![](https://img.shields.io/badge/DRL-DuelingDQN-yellow)
+![](doc/cover.png)
 
 RLGF是一个适用于无人机深度强化学习任务的通用训练框架，构建了适用于无人机任务的动作模型，包括连续飞行动作与离散飞行动作。预置了飞行能量消耗模型与航线规划模型。能够根据自身任务自定义任务环境模型与无人机模型。并集成了多种主流的深度强化学习算法。
 + 自定义开发： 该框架以配置XML文件的形式制定无人机强化学习任务，隐藏了深度强化学习过程的过程。仅需要重写环境模型与无人机模型中特定的函数，便能快速实现自定义无人机任务的开发。
@@ -89,4 +90,5 @@ RLGF是一个适用于无人机深度强化学习任务的通用训练框架，�
 ![](doc/path3.png)
 
 基于cesium的训练过程动态可视化
+![](doc/sample.png)
 ![](doc/sample2.gif)
