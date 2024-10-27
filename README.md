@@ -14,7 +14,7 @@ RLGF是一个适用于无人机深度强化学习任务的通用训练框架，�
 + 可视化平台： jdk 17, Spring 6.15, maven, MySQL 10.3.19.
 
 ## 引用
-+ 内置算法均改自《动手学强化学习》中的代码。github链接：https://github.com/boyu-ai/Hands-on-RL。
++ 内置算法均改自《动手学强化学习》中的代码。github链接：https://github.com/boyu-ai/Hands-on-RL
 
 ## 项目目录简介
 
