@@ -17,6 +17,7 @@ RLGF是一个适用于无人机深度强化学习任务的通用训练框架，�
 
 - RLGF/
   - README.md
+  - requirements.txt
   - Agents/     &nbsp;&nbsp;&nbsp;#智能体模型所在目录，存放无人机或其他有关的智能体模型
   - BaseClass/ &nbsp;&nbsp;&nbsp;#存放基本的模型基类，以及通用计算工具
   - config/
@@ -31,10 +32,12 @@ RLGF是一个适用于无人机深度强化学习任务的通用训练框架，�
     - Connector.py &nbsp;&nbsp;&nbsp;#提供连接数据库的功能。
   - Env/  &nbsp;&nbsp;&nbsp;#存放环境模型类。
   - FactoryClass/  &nbsp;&nbsp;&nbsp;#对应的工厂类。
+  - logs/ &nbsp;&nbsp;&nbsp;#存放运行日志。
   - Mod/  &nbsp;&nbsp;&nbsp;#存放神经网络模型。
   - Obstacles/  &nbsp;&nbsp;&nbsp;#存放自定义的障碍物类。
   - Trainer/  &nbsp;&nbsp;&nbsp;#存放已经实现的强化学习算法训练器。
   - simulator.py &nbsp;&nbsp;&nbsp;#训练器启动器。
+
 
 ## 基本使用案例
 

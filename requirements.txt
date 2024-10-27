@@ -1,0 +1,7 @@
+torch==1.11.0
+numpy==1.21
+tqdm
+pyecharts
+xmltodict
+matplotlib
+mysql-connector-python
