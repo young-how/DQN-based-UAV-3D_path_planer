@@ -14,7 +14,6 @@ from BaseClass.CalMod import *
 from FactoryClass.EnvFactory import *
 import sys
 import numpy as np
-#sys.path.append("E:\younghow\RLGF")
 import os
 from tqdm import tqdm
 root=os.path.dirname(os.path.abspath(__file__))
@@ -103,30 +102,7 @@ class simulator():
             print(e.args)  #输出异常信息
             return None
 
-    def StartAndTrain(self,flag=0):
-        #开始仿真模拟，并同步进行训练
-        #输入参数：
-        #       flag    ：      训练方式，0：随机重置环境   1：根据配置文件配置
-        # while self.epoch<self.num_episodes:
-        #     if self.stat==2:
-        #         continue   #暂停
-        #     elif self.stat==3:
-        #         return      #停止训练与模拟
-        #     elif self.stat==1:
-        #         if flag==0:
-        #             self.epoch+=1
-        #             eps_rate=self.epsilon_annealing()       #获取贪心概率
-        #             info=self.env.run_eposide(eps_rate)   #计算机随机生成场景进行训练
-        #             self.epoch+=1
-        #             self.record(info)   #将记录写入文件中
-        #             if self.epoch%self.print_every==0:
-        #                 #在控制台输出并保存训练信息
-        #                 print(info)
-        #                 self.record(info)
-        #         else:
-        #             self.env.run_XML_scene()   #根据现有的场景进行训练
-
-        #带进度条的训练
+    def StartAndTrain(self,flag=0): 
         for i in range(10):
             with tqdm(total=int(self.num_episodes / 10), desc='Iteration %d' % i) as pbar:
                 for i_episode in range(int(self.num_episodes / 10)):
@@ -148,11 +124,6 @@ class simulator():
                             self.record_list()  #对缓存列表进行统计
                         else:
                             self.env.run_XML_scene()   #根据现有的场景进行训练
-
-
-                        # loss=0
-                        # if type(info['loss'])!=int:
-                        #     loss=info['loss'].item()
                         #更新进度条
                         if (i_episode + 1) % 2 == 0:
                             pbar.set_postfix({
@@ -179,20 +150,6 @@ class simulator():
 
     def record_list(self):
         sum_epoch=score=average_score=eps=success=lose=meet_threaten=loss=step=0
-        # list_len=len(self.infos)
-        # if self.infos!=[]:
-        #     for line in self.infos:
-        #         sum_epoch+=line['sum_epoch']
-        #         score+=line['score']
-        #         average_score+=line['average_score']  
-        #         eps+=line['eps']
-        #         success+=line['success']
-        #         lose+=line['lose']
-        #         meet_threaten+=line['meet_threaten']
-        #         loss+=abs(line['loss'])   #loss的绝对值
-        #         # step+=line['step']
-        #         step+=0
-        #     self.CsvWriter.writerow([sum_epoch/list_len,self.epoch,score/list_len,average_score/list_len,eps/list_len,success/list_len,lose/list_len,meet_threaten/list_len,loss/list_len,step/list_len])
         self.infos=[]  #清空列表
         traing_time=0
         testing_time=0
